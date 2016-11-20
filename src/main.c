@@ -74,6 +74,16 @@ static char heroChar = 170;
 static char heroColour = 3;
 static int heroPos;
 
+static char selected;
+static char curShape,curColour;
+static int shapeOffset;
+
+
+static int delta,deltax,deltay;
+
+static char cursorx;
+static char cursory;
+
 static int screenH = 24;
 static int screenW = 39;
 
@@ -134,14 +144,16 @@ static char shapes[7][4] = {
 
 }*/
 
-void moveShape(char type, char colour, int startPos)
+
+
+void moveShape(char type, char colour, int start)
 {
   char n;
   int offset;
 
   for( n = 0; n < 4; n++ ){
 
-    offset=startPos + shapes[type][n];
+    offset=start + shapes[type][n];
 
     POKE(0xd800 + offset , colour);
     locBuf[offset][0]=type;
@@ -150,14 +162,14 @@ void moveShape(char type, char colour, int startPos)
 }
 
 
-void drawShape(char type, char colour, int startPos)
+void drawShape(char type, char colour, int start)
 {
   char n;
   int offset;
 
   for( n = 0; n < 4; n++ ){
 
-    offset=startPos + shapes[type][n];
+    offset=start + shapes[type][n];
 
     //POKE(0x0400 + offset , 224);
     POKE(0xd800 + offset , colour);
@@ -165,6 +177,63 @@ void drawShape(char type, char colour, int startPos)
     locBuf[offset][1]=n;
    }
 }
+
+
+int detectCollision(int start)
+{
+  char n;
+
+  for( n = 0; n < 4; n++ )
+  {
+    if( PEEK(0xd800 + start + shapes[curShape][n]) != 0)
+    {
+      return 1;
+    }
+  }
+
+   return 0;
+}
+
+
+void moveHero( )
+{
+
+  //If selected==1 move the shape along with the hero
+  if(selected == 1)
+  {
+    if (detectCollision(heroPos + delta -shapeOffset) == 0)
+    {
+      drawShape(curShape, 0, heroPos-shapeOffset);
+      POKE(0x0400 + heroPos , 224);
+
+      heroPos = heroPos + delta;
+
+      drawShape(curShape, curColour, heroPos-shapeOffset);
+      POKE(0x0400 + heroPos , heroChar);
+
+      cursorx = cursorx + deltax;
+      cursory = cursory + deltay;
+    }
+
+  }
+  //Otherwise, just move the hero
+  else
+  {
+    POKE(0x0400 + heroPos , 224);
+
+    heroPos = heroPos + delta;
+
+    POKE(0x0400 + heroPos , heroChar);
+    cursorx = cursorx + deltax;
+    cursory = cursory + deltay;
+  }
+
+  cclearxy(0,0,screenW+1);
+  gotoxy(0,0);
+  cprintf("x: %d dx: %d y: %d dy: %d h: %d dh: %d",cursorx,deltax,cursory,deltay,heroPos,delta);
+}
+
+
 
 
 /******************************************************************************/
@@ -184,8 +253,8 @@ void screenSetup()
 
   for( i=0; i<1000; i++ )
   {
-    POKE(0x0400 + i , 224);
     POKE(0xd800 + i , 0);
+    POKE(0x0400 + i , 224);
   }
 
 
@@ -193,12 +262,15 @@ void screenSetup()
   {
     s = rand() % 6;
     c = rand() % 14;
-    x = rand() % 1000;
+    x = rand() % 999;
 
     drawShape(s,c,x);
   }
 
   bgcolor (heroColour);
+
+  cclearxy(0,0,screenW+1);
+  
 
 }
 
@@ -214,15 +286,11 @@ int main( void )
   struct mouse_info info;
 
   int i,s,c,x;
-  int startPos,offset;
 
-  char cursorx;
-  char cursory;
   char pet;
-  char selected;
-  char curShape,curColour;
 
-  memcpy ((void*) SPRITE0_DATA, MouseSprite0, sizeof (MouseSprite0));
+
+  //memcpy ((void*) SPRITE0_DATA, MouseSprite0, sizeof (MouseSprite0));
 
 
 
@@ -257,9 +325,6 @@ int main( void )
         //
         //uint8_t pet = cgetc();
         pet = cgetc();
-        
-        startPos = (cursory)*40 + cursorx;
-
 
         switch( pet )
         {
@@ -267,10 +332,10 @@ int main( void )
           case PETSCII_DOWN:
 
             if(cursory < screenH){
-              cursory++;
-              POKE(0x0400 + heroPos , 224);
-              heroPos = heroPos + 40;
-              POKE(0x0400 + heroPos , heroChar);
+              deltax = 0;
+              deltay = 1;
+              delta = 40;
+              moveHero();
             }
             break;
 
@@ -278,10 +343,10 @@ int main( void )
           case PETSCII_UP:
 
             if(cursory > 0){
-              cursory--;
-              POKE(0x0400 + heroPos , 224);
-              heroPos = heroPos - 40;
-              POKE(0x0400 + heroPos , heroChar);
+              deltax = 0;
+              deltay = -1;
+              delta = -40;
+              moveHero();
             }
             break;
 
@@ -289,10 +354,10 @@ int main( void )
           case PETSCII_LEFT:
 
             if(cursorx > 0){
-              cursorx--;
-              POKE(0x0400 + heroPos , 224);
-              heroPos = heroPos - 1;
-              POKE(0x0400 + heroPos , heroChar);
+              deltax = -1;
+              deltay = 0;
+              delta = -1;
+              moveHero();
             }
             break;
 
@@ -300,22 +365,22 @@ int main( void )
           case PETSCII_RIGHT:
 
             if(cursorx < screenW){
-              cursorx++;
-              POKE(0x0400 + heroPos , 224);
-              heroPos = heroPos + 1;
-              POKE(0x0400 + heroPos , heroChar);
+              deltax = 1;
+              deltay = 0;
+              delta = 1;
+              moveHero();
             }
             break;
 
           //Select object
           case PETSCII_F1:
 
-            if(PEEK(0xd800 + heroPos) > 0 && selected == 0)
+            if(PEEK(0xd800 + heroPos) !=0 && selected == 0)
             {
               selected = 1;
               bgcolor (2);
 
-              offset = shapes[  (locBuf[heroPos][0])  ][  (locBuf[heroPos][1])    ] - shapes[  (locBuf[heroPos][0])  ][  0  ];
+              shapeOffset = shapes[  (locBuf[heroPos][0])  ][  (locBuf[heroPos][1])    ] - shapes[  (locBuf[heroPos][0])  ][  0  ];
 
               curShape = locBuf[heroPos][0];
               curColour = PEEK(0xd800 + heroPos);
@@ -329,59 +394,9 @@ int main( void )
 
             break;
 
-
-
         }
 
-        if(selected == 1)
-        {
-
-
-          drawShape(curShape, 0, startPos-offset);
-
-          drawShape(curShape, curColour, heroPos-offset);
-
-        }
-        //mouse_move (cursorx , cursory);
       }
-
-
-
-
-
-
-
-    // mouse_move (cursorx , cursory);
-
-    /*for( i = 0; i < 4; i++ ){
-
-
-
-    }*/
-    //mouse_info (&info);
-
-    //drawShape(0,1,info.pos.x*info.pos.y);
-
-
-
-/*
-  for( s=0; s<8; s++)
-  {
-
-    //for( c=1; c<15; c++)
-    //{
-
-      for( x=0; x<1000; x++)
-      {
-        //drawShape(s,0,x-1);
-        drawShape(s,1,x);
-
-        if(c>15){c=0;}
-      }
-   //}
-  }
-
-*/
 
   }
 
