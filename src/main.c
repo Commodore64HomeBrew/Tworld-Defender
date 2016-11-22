@@ -75,7 +75,7 @@ static char heroColour = 3;
 static int heroPos;
 
 static char selected;
-static char curShape,curColour;
+static char curShape,curColour,curID;
 static int shapeOffset;
 
 
@@ -92,7 +92,7 @@ static int screenPixW = 320;
 
 static char sRunning = 1;
 
-static char locBuf[bufSize][2] ;
+static char locBuf[bufSize][3] ;
 
 /* The mouse sprite (an arrow) */
 static const unsigned char MouseSprite0[64] = {
@@ -136,33 +136,8 @@ static char shapes[7][4] = {
 //
 // Functions
 
-/*void pchar( unsigned char charin ){
 
-  putchar(charin);
-
-  return();
-
-}*/
-
-
-
-void moveShape(char type, char colour, int start)
-{
-  char n;
-  int offset;
-
-  for( n = 0; n < 4; n++ ){
-
-    offset=start + shapes[type][n];
-
-    POKE(0xd800 + offset , colour);
-    locBuf[offset][0]=type;
-    locBuf[offset][1]=n;
-   }
-}
-
-
-void drawShape(char type, char colour, int start)
+void drawShape(char type, char colour, int start, int id)
 {
   char n;
   int offset;
@@ -175,6 +150,7 @@ void drawShape(char type, char colour, int start)
     POKE(0xd800 + offset , colour);
     locBuf[offset][0]=type;
     locBuf[offset][1]=n;
+    locBuf[offset][2]=id;
    }
 }
 
@@ -182,13 +158,13 @@ void drawShape(char type, char colour, int start)
 int detectCollision(int start)
 {
   char n;
+  int offset;
 
   for( n = 0; n < 4; n++ )
   {
-    if( PEEK(0xd800 + start + shapes[curShape][n]) != 0)
-    {
-      return 1;
-    }
+    offset=start + shapes[curShape][n];
+
+    if (locBuf[offset][2] != curID && locBuf[offset][2] != 0 ){return 1;}
   }
 
    return 0;
@@ -203,12 +179,12 @@ void moveHero( )
   {
     if (detectCollision(heroPos + delta -shapeOffset) == 0)
     {
-      drawShape(curShape, 0, heroPos-shapeOffset);
+      drawShape(curShape, 0, heroPos-shapeOffset,0);
       POKE(0x0400 + heroPos , 224);
 
       heroPos = heroPos + delta;
 
-      drawShape(curShape, curColour, heroPos-shapeOffset);
+      drawShape(curShape, curColour, heroPos-shapeOffset,curID);
       POKE(0x0400 + heroPos , heroChar);
 
       cursorx = cursorx + deltax;
@@ -255,16 +231,20 @@ void screenSetup()
   {
     POKE(0xd800 + i , 0);
     POKE(0x0400 + i , 224);
+
+    locBuf[i][0]=0;
+    locBuf[i][1]=0;
+    locBuf[i][2]=0;
   }
 
 
-  for( i=0; i<8; i++)
+  for( i=1; i<9; i++)
   {
     s = rand() % 6;
     c = rand() % 14;
     x = rand() % 999;
 
-    drawShape(s,c,x);
+    drawShape(s,c,x,i);
   }
 
   bgcolor (heroColour);
@@ -383,6 +363,7 @@ int main( void )
               shapeOffset = shapes[  (locBuf[heroPos][0])  ][  (locBuf[heroPos][1])    ] - shapes[  (locBuf[heroPos][0])  ][  0  ];
 
               curShape = locBuf[heroPos][0];
+              curID = locBuf[heroPos][2];
               curColour = PEEK(0xd800 + heroPos);
 
             }
